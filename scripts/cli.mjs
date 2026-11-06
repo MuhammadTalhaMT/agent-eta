@@ -55,6 +55,24 @@ function readInput(path, what) {
   }
 }
 
+// Plan tasks whose checkboxes are all ticked are already built; a mid-plan estimate covers the rest.
+function tickedTaskIds(planFile) {
+  try {
+    return parsePlan(readFileSync(planFile, 'utf8')).tasks.filter(t => t.steps > 0 && t.done === t.steps).map(t => t.id);
+  } catch {
+    return [];
+  }
+}
+
+function withoutTasks(input, ids) {
+  return {
+    ...input,
+    tasks: input.tasks
+      .filter(t => !ids.includes(t?.id))
+      .map(t => (Array.isArray(t?.depends_on) ? { ...t, depends_on: t.depends_on.filter(d => !ids.includes(d)) } : t)),
+  };
+}
+
 function safeMeasure(ctx) {
   try {
     return ctx.measure(ctx);
@@ -114,6 +132,20 @@ function run(argv, { env, cwd, now, out, err, measure }) {
         if (e instanceof InputError) throw e;
         throw new InputError(`Invalid JSON in tags file ${tagsPath}: ${e.message}`);
       }
+      let planPath = option(args, '--plan');
+      if (planPath && !existsSync(resolve(project, planPath))) {
+        err(`Plan file not found: ${planPath}. Saving as a rough estimate.`);
+        planPath = undefined;
+      }
+      const ticked = planPath ? tickedTaskIds(resolve(project, planPath)) : [];
+      const skipped = Array.isArray(input?.tasks) ? input.tasks.filter(t => ticked.includes(t?.id)).map(t => t.id) : [];
+      if (skipped.length) {
+        input = withoutTasks(input, skipped);
+        if (!input.tasks.length) {
+          err(`Every task in ${planPath} is already ticked; nothing left to estimate.`);
+          return 2;
+        }
+      }
       const { calibration, warning } = loadCalibration(dir);
       const params = effectiveParams(defaults, calibration);
       let est;
@@ -125,11 +157,6 @@ function run(argv, { env, cwd, now, out, err, measure }) {
       }
       const calibrationActive = calibration.confirmed >= defaults.minConfirmed;
       const tips = speedups(input, params, est);
-      let planPath = option(args, '--plan');
-      if (planPath && !existsSync(resolve(project, planPath))) {
-        err(`Plan file not found: ${planPath}. Saving as a rough estimate.`);
-        planPath = undefined;
-      }
       const record = {
         id: newId(now),
         project,
@@ -150,11 +177,15 @@ function run(argv, { env, cwd, now, out, err, measure }) {
             ? { cells: { ...calibration.cells }, workflow: calibration.workflow?.[est.workflow] ?? 1 }
             : { cells: {}, workflow: 1 },
         },
+        ...(skipped.length ? { skippedTasks: skipped } : {}),
         status: 'open',
       };
       appendRecord(dir, record);
       out(formatReport(est, tips, calibrationStatus(defaults, calibration), warning));
       out('');
+      if (skipped.length) {
+        out(`Skipped task${skipped.length === 1 ? '' : 's'} ${skipped.join(', ')} (already ticked in the plan).`);
+      }
       out(planPath
         ? `Estimate ${record.id} saved. I'll notice when every plan checkbox is ticked, or run /agent-eta:eta-done.`
         : `Estimate ${record.id} saved. Run /agent-eta:eta-done when this work is finished so the estimate can learn.`);

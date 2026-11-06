@@ -77,6 +77,34 @@ test('estimate with --plan saves a precise record', () => {
   assert.equal(r.planPath, plan);
 });
 
+test('precise estimate skips tasks whose steps are all ticked', () => {
+  const h = harness();
+  const plan = join(tmp(), 'plan.md');
+  writeFileSync(plan, [
+    '### Task 1: API route', '', '- [x] a', '- [x] b', '',
+    '### Task 2: Form', '', '- [x] a', '- [ ] b', '',
+    '### Task 3: Notes', '', 'no checkboxes here', '',
+  ].join(String.fromCharCode(10)));
+  const tags = structuredClone(TAGS);
+  tags.tasks[1].depends_on = [1];
+  tags.tasks.push({ id: 3, title: 'Notes', size: 'S', kind: 'mechanical' });
+  assert.equal(h.run(['estimate', tagsFile(tags), '--plan', plan]), 0);
+  const [r] = readRecords(h.home);
+  assert.deepEqual(r.predicted.perTask.map(t => t.id), [2, 3]);
+  assert.deepEqual(r.input.tasks.find(t => t.id === 2).depends_on, []);
+  assert.deepEqual(r.skippedTasks, [1]);
+  assert.match(h.out(), /Skipped task 1 \(already ticked/);
+});
+
+test('precise estimate with every task ticked exits 2 and saves nothing', () => {
+  const h = harness();
+  const plan = join(tmp(), 'plan.md');
+  writeFileSync(plan, ['### Task 1: API route', '', '- [x] a', '', '### Task 2: Form', '', '- [x] a', ''].join(String.fromCharCode(10)));
+  assert.equal(h.run(['estimate', tagsFile(TAGS), '--plan', plan]), 2);
+  assert.match(h.err(), /already ticked/);
+  assert.equal(readRecords(h.home).length, 0);
+});
+
 test('invalid tags exit 2 and name the field', () => {
   const h = harness();
   const bad = structuredClone(TAGS);
