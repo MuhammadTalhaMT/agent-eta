@@ -14,6 +14,9 @@ function atomicWrite(path, text) {
 
 export const recordsPath = dir => join(dir, 'estimates.jsonl');
 
+const isRecord = v => v !== null && typeof v === 'object' && !Array.isArray(v)
+  && typeof v.id === 'string' && typeof v.status === 'string';
+
 export function readRecords(dir) {
   const p = recordsPath(dir);
   if (!existsSync(p)) return [];
@@ -22,7 +25,8 @@ export function readRecords(dir) {
     .filter(l => l.trim())
     .flatMap(l => {
       try {
-        return [JSON.parse(l)];
+        const v = JSON.parse(l);
+        return isRecord(v) ? [v] : [];
       } catch {
         return [];
       }
@@ -31,6 +35,20 @@ export function readRecords(dir) {
 
 export function writeRecords(dir, records) {
   atomicWrite(recordsPath(dir), records.map(r => JSON.stringify(r)).join('\n') + (records.length ? '\n' : ''));
+}
+
+// Re-read the file and merge by id just before writing, so a record appended (or changed)
+// by another session since our first read isn't lost. `changed` records win; unknown ids are appended.
+export function updateRecords(dir, changed) {
+  mkdirSync(dir, { recursive: true });
+  const byId = new Map(changed.map(r => [r.id, r]));
+  const merged = readRecords(dir).map(r => {
+    if (!byId.has(r.id)) return r;
+    const mine = byId.get(r.id);
+    byId.delete(r.id);
+    return mine;
+  });
+  writeRecords(dir, [...merged, ...byId.values()]);
 }
 
 export function appendRecord(dir, record) {
