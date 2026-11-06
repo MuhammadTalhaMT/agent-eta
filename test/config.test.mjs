@@ -61,3 +61,13 @@ test('calibrationStatus wording', () => {
   assert.equal(calibrationStatus(p, { confirmed: 2 }), 'default numbers (1 more confirmed estimate until personal)');
   assert.equal(calibrationStatus(p, { confirmed: 4 }), 'personal numbers (from 4 confirmed estimates)');
 });
+
+test('calibration file that is not a plain object is corrupt', () => {
+  for (const body of ['[]', 'null', '5', '"x"', '{"cells": null}', '{"cells": []}', '{"workflow": 3}']) {
+    const dir = tmp();
+    writeFileSync(join(dir, 'calibration.json'), body);
+    const r = loadCalibration(dir);
+    assert.deepEqual(r.calibration, emptyCalibration(), body);
+    assert.equal(r.warning, 'calibration.json is corrupt; using default numbers', body);
+  }
+});

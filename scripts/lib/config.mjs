@@ -20,6 +20,8 @@ export function emptyCalibration() {
   return { confirmed: 0, cells: {}, workflow: {}, replyDelay: null };
 }
 
+const isPlainObject = v => v !== null && typeof v === 'object' && !Array.isArray(v);
+
 export function loadCalibration(dir) {
   let text;
   try {
@@ -27,11 +29,18 @@ export function loadCalibration(dir) {
   } catch {
     return { calibration: emptyCalibration(), warning: null };
   }
+  const corrupt = { calibration: emptyCalibration(), warning: 'calibration.json is corrupt; using default numbers' };
+  let parsed;
   try {
-    return { calibration: { ...emptyCalibration(), ...JSON.parse(text) }, warning: null };
+    parsed = JSON.parse(text);
   } catch {
-    return { calibration: emptyCalibration(), warning: 'calibration.json is corrupt; using default numbers' };
+    return corrupt;
   }
+  if (!isPlainObject(parsed)) return corrupt;
+  for (const key of ['cells', 'workflow']) {
+    if (key in parsed && !isPlainObject(parsed[key])) return corrupt;
+  }
+  return { calibration: { ...emptyCalibration(), ...parsed }, warning: null };
 }
 
 export function effectiveParams(defaults, calibration) {

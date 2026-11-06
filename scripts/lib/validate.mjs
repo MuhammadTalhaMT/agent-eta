@@ -34,6 +34,13 @@ export function validateInput(input) {
       if (t[key] !== undefined && !Array.isArray(t[key])) fail(`${at}.${key}`, 'must be an array');
     }
     (t.flags ?? []).forEach((f, j) => { if (!FLAGS.includes(f)) fail(`${at}.flags[${j}]`, oneOf(FLAGS)); });
+    (t.files ?? []).forEach((f, j) => {
+      if (typeof f !== 'string' || !f.trim()) fail(`${at}.files[${j}]`, 'must be a non-empty string');
+    });
+    (t.depends_on ?? []).forEach((d, j) => {
+      if (!Number.isInteger(d)) fail(`${at}.depends_on[${j}]`, 'must be an integer');
+      if (d === t.id) fail(`${at}.depends_on[${j}]`, 'cannot reference the task itself');
+    });
   });
 
   input.tasks.forEach((t, i) => {

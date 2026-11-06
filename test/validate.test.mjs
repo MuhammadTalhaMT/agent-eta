@@ -57,3 +57,23 @@ test('unknown phase is rejected', () => {
   i.phases = ['brainstorm', 'deploy'];
   assert.throws(() => validateInput(i), /Invalid tags: phases\[1\]/);
 });
+
+test('non-string or empty files entry is rejected', () => {
+  const i = good();
+  i.tasks[1].files = ['a.mjs', ''];
+  assert.throws(() => validateInput(i), /Invalid tags: tasks\[1\]\.files\[1\] must be a non-empty string/);
+  i.tasks[1].files = [5];
+  assert.throws(() => validateInput(i), /Invalid tags: tasks\[1\]\.files\[0\] must be a non-empty string/);
+});
+
+test('non-integer depends_on entry is rejected', () => {
+  const i = good();
+  i.tasks[1].depends_on = ['1'];
+  assert.throws(() => validateInput(i), /Invalid tags: tasks\[1\]\.depends_on\[0\] must be an integer/);
+});
+
+test('task depending on itself is rejected', () => {
+  const i = good();
+  i.tasks[1].depends_on = [2];
+  assert.throws(() => validateInput(i), /Invalid tags: tasks\[1\]\.depends_on\[0\] cannot reference the task itself/);
+});
