@@ -71,7 +71,7 @@ test('matchTasks matches by "Task N" word or title, summing runs', () => {
 
 test('applyLearning: matched tasks update cells, else workflow; reply delay; count', () => {
   const p = testParams();
-  const actual = { agentMinutes: 15, userMinutes: 8, humanGaps: 1 };
+  const actual = { agentMinutes: 15, userMinutes: 24, humanGaps: 3, humanGapMedian: 8 };
   const matched = [{ kind: 'integration', size: 'M', agent: 10, actual: 20 }];
   const a = applyLearning(emptyCalibration(), record(), actual, matched, p);
   near(a.cells['integration.M'], 1.3);
@@ -81,6 +81,47 @@ test('applyLearning: matched tasks update cells, else workflow; reply delay; cou
 
   const b = applyLearning(emptyCalibration(), record(), actual, [], p);
   near(b.workflow.inline, 1.15);
+});
+
+test('applyLearning skips reply delay with fewer than 3 human gaps', () => {
+  const actual = { agentMinutes: 15, userMinutes: 16, humanGaps: 2, humanGapMedian: 8 };
+  const a = applyLearning(emptyCalibration(), record(), actual, [], testParams());
+  assert.equal(a.replyDelay, null);
+});
+
+test('applyLearning converges toward the true factor without overshooting (applied = 1)', () => {
+  const p = testParams();
+  const actual = { agentMinutes: 15, userMinutes: 0, humanGaps: 0, humanGapMedian: null };
+  const matched = [{ kind: 'integration', size: 'M', agent: 10, actual: 20 }];
+  let cal = emptyCalibration();
+  const seen = [];
+  for (let i = 0; i < 3; i++) {
+    cal = applyLearning(cal, record({ predicted: { ...record().predicted, applied: { cells: {}, workflow: 1 } } }), actual, matched, p);
+    seen.push(cal.cells['integration.M']);
+  }
+  near(seen[0], 1.3);
+  near(seen[1], 1.51);
+  near(seen[2], 1.657);
+  assert.ok(seen.every(v => v < 2));
+});
+
+test('applyLearning scales the target by the multiplier that was applied', () => {
+  const p = testParams();
+  const rec = record({ predicted: { ...record().predicted, applied: { cells: { 'integration.M': 1.5 }, workflow: 1 } } });
+  const cal = emptyCalibration();
+  cal.cells['integration.M'] = 1.5;
+  const matched = [{ kind: 'integration', size: 'M', agent: 15, actual: 20 }];
+  const out = applyLearning(cal, rec, { agentMinutes: 1, userMinutes: 0, humanGaps: 0, humanGapMedian: null }, matched, p);
+  near(out.cells['integration.M'], 1.5 + 0.3 * (20 / 15 * 1.5 - 1.5));
+});
+
+test('applyLearning averages ratios of tasks sharing a cell', () => {
+  const matched = [
+    { kind: 'integration', size: 'M', agent: 10, actual: 20 },
+    { kind: 'integration', size: 'M', agent: 10, actual: 10 },
+  ];
+  const out = applyLearning(emptyCalibration(), record(), { agentMinutes: 1, userMinutes: 0, humanGaps: 0, humanGapMedian: null }, matched, testParams());
+  near(out.cells['integration.M'], 1.15);
 });
 
 test('runMeasure confirms a done estimate and saves calibration', () => {
@@ -130,4 +171,29 @@ test('runMeasure leaves open estimates alone', () => {
   runMeasure({ dir, defaults: testParams(), now: Date.parse(T('12:00')), root: tmp() });
   assert.equal(readRecords(dir)[0].status, 'open');
   assert.equal(existsSync(join(dir, 'calibration.json')), false);
+});
+
+test('runMeasure: one bad record does not stop the good one', () => {
+  const dir = tmp();
+  const root = tmp();
+  transcripts(root);
+  appendRecord(dir, { id: 'bad', project: PROJECT, startedAt: T('10:00'), mode: 'rough', workflow: 'inline', status: 'open', doneAt: T('10:30') });
+  appendRecord(dir, record({ id: 'good', doneAt: T('10:30') }));
+  runMeasure({ dir, defaults: testParams(), now: Date.parse(T('12:00')), root });
+  const byId = Object.fromEntries(readRecords(dir).map(r => [r.id, r]));
+  assert.equal(byId.good.status, 'confirmed');
+  assert.equal(byId.bad.status, 'unconfirmed');
+  assert.equal(byId.bad.reason, 'record unreadable');
+  assert.equal(loadCalibration(dir).calibration.confirmed, 1);
+});
+
+test('findDoneAt: unreadable plan counts as not done; plan time capped at now', () => {
+  const p = testParams();
+  const plan = join(tmp(), 'plan.md');
+  writeFileSync(plan, '### Task 1: A\n\n- [x] step\n');
+  const early = Date.parse(T('10:00'));
+  const d = findDoneAt(record({ planPath: plan }), early, p);
+  assert.equal(d.status, 'done');
+  assert.ok(d.doneAt <= early);
+  assert.equal(findDoneAt(record({ planPath: tmp() }), early, p).status, 'open');
 });
