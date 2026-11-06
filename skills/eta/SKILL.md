@@ -67,11 +67,13 @@ Tasks:
 
 After the tagger replies, overwrite `workflow`, `phases` and each task's `title` and `files` in its JSON with the values you decided yourself (do not trust the tagger to echo them). Keep only the tagger's `size`, `kind`, `flags` and `depends_on`.
 
-Write the JSON with the Write tool to an absolute path in your scratchpad directory if you have one, else the OS temp dir (`$TEMP` / `%TEMP%`). Never use `/tmp`. Pass that same absolute path to the CLI with forward slashes, in double quotes. Then:
+Write the JSON with the Write tool to a **new** file with a random suffix (for example `eta-tags-7f3k2q.json`) in your scratchpad directory if you have one, else the OS temp dir (`$TEMP` / `%TEMP%`). Never reuse an existing file and never use `/tmp`. **Wait until the Write succeeds before running the CLI**: never send the Write and the `estimate` command in the same batch of tool calls. A failed Write leaves an old file behind, and the CLI would save an estimate from those stale tags. If the Write fails, fix that and write again first.
+
+Pass that same absolute path to the CLI with forward slashes, in double quotes. Run `estimate` **once** per request: every run saves an estimate. Then:
 - rough: `<cli> estimate "<json file>"`
 - precise: `<cli> estimate "<json file>" --plan "<plan path>"`
 
-If it exits with `Invalid tags: <field> …`, fix that one field and run again **once**. If it fails again, show the error and stop.
+If it exits with `Invalid tags: <field> …` (nothing was saved), fix that one field in a new file and run again **once**. If it fails again, show the error and stop.
 
 ## 5. Show the result
 
