@@ -1,8 +1,10 @@
+// NOTE: `base` is "one implementer dispatch": only implementer-like subagent runs feed it.
+// The workflowFactor 1.8 is a spec-seeded guess, not derived from data.
 // Dev-only. Reads the author's local Claude Code transcripts and derives starting numbers.
 // Only aggregate numbers are written; no transcript text, file names or project names.
 // Usage: node tools/seed-defaults.mjs          (print only)
 //        node tools/seed-defaults.mjs --write  (also update data/defaults.json)
-import { readdirSync, existsSync, writeFileSync } from 'node:fs';
+import { readdirSync, existsSync, writeFileSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { projectsRoot, readEntries } from '../scripts/lib/transcripts.mjs';
 import { loadDefaults, DEFAULTS_PATH } from '../scripts/lib/config.mjs';
@@ -10,6 +12,7 @@ import { loadDefaults, DEFAULTS_PATH } from '../scripts/lib/config.mjs';
 const MIN_RUN = 0.5;
 const MAX_RUN = 120;
 const MAX_REPLY = 30;
+const EXCLUDE = /review|explore|search|find|research|audit|investigat|verify|check|tag|scan|look/i;
 const KIND_FACTOR = { mechanical: 0.6, integration: 1.0, judgment: 1.6 };
 
 const round1 = x => Math.round(x * 10) / 10;
@@ -21,6 +24,9 @@ function pct(xs, p) {
 const root = projectsRoot();
 const runs = [];
 const replies = [];
+let included = 0;
+let excluded = 0;
+let dropped = 0;
 
 for (const proj of readdirSync(root, { withFileTypes: true })) {
   if (!proj.isDirectory()) continue;
@@ -47,7 +53,20 @@ for (const proj of readdirSync(root, { withFileTypes: true })) {
           if (e.ts > hi) hi = e.ts;
         }
         const minutes = (hi - lo) / 60000;
-        if (minutes >= MIN_RUN && minutes <= MAX_RUN) runs.push(minutes);
+        if (minutes < MIN_RUN || minutes > MAX_RUN) {
+          dropped++;
+          continue;
+        }
+        let desc = '';
+        try {
+          desc = String(JSON.parse(readFileSync(join(sub, f.replace(/\.jsonl$/, '.meta.json')), 'utf8')).description ?? '');
+        } catch {}
+        if (EXCLUDE.test(desc)) {
+          excluded++;
+          continue;
+        }
+        included++;
+        runs.push(minutes);
       }
     }
   }
@@ -65,6 +84,7 @@ for (const [kind, f] of Object.entries(KIND_FACTOR)) {
 }
 const replyDelay = round1(pct(replies, 0.5));
 
+console.log(`Runs included=${included} excluded=${excluded} duration-dropped=${dropped}`);
 console.log(`Subagent runs: ${runs.length}  p25=${round1(p25)}  p50=${round1(p50)}  p75=${round1(p75)} min`);
 console.log(`Human replies: ${replies.length}  median=${replyDelay} min`);
 console.log('base =', JSON.stringify(base));
