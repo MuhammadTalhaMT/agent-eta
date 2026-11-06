@@ -254,6 +254,18 @@ test('stats with no confirmed estimates', () => {
   assert.match(h.out(), /No confirmed estimates yet/);
 });
 
+test('stats labels corrections inactive until enough estimates are confirmed', () => {
+  const h = harness();
+  saveCalibration(h.home, { confirmed: 1, cells: { 'integration.M': 1.4 }, workflow: {}, replyDelay: null });
+  h.run(['stats']);
+  assert.match(h.out(), /Corrections \(inactive until 2 more confirmed\): integration\.M ×1\.40/);
+
+  const k = harness();
+  saveCalibration(k.home, { confirmed: 3, cells: { 'integration.M': 1.4 }, workflow: {}, replyDelay: null });
+  k.run(['stats']);
+  assert.match(k.out(), /^Corrections: integration\.M ×1\.40/m);
+});
+
 test('unknown command prints usage and exits 1', () => {
   const h = harness();
   assert.equal(h.run(['nope']), 1);

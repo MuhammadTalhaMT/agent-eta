@@ -268,7 +268,11 @@ function run(argv, { env, cwd, now, out, err, measure }) {
         ...Object.entries(cal.workflow ?? {}).filter(finite).map(([k, v]) => `workflow ${k} ×${v.toFixed(2)}`),
         ...(Number.isFinite(cal.replyDelay) ? [`reply delay ${cal.replyDelay.toFixed(1)} min`] : []),
       ];
-      if (corr.length) lines.push(`Corrections: ${corr.join(', ')}`);
+      if (corr.length) {
+        const left = defaults.minConfirmed - (Number.isFinite(cal.confirmed) ? cal.confirmed : 0);
+        const label = left > 0 ? `Corrections (inactive until ${left} more confirmed)` : 'Corrections';
+        lines.push(`${label}: ${corr.join(', ')}`);
+      }
       lines.push(`Calibration: ${calibrationStatus(defaults, cal)}`);
       out(lines.join('\n'));
       return 0;
