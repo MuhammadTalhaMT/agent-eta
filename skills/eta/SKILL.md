@@ -18,13 +18,13 @@ You only break the work into tagged tasks. A script does all the maths. **Never 
 
 ## 2. Build the task list
 
-**Precise mode:** run `<cli> plan "<plan path>"`. Use its `tasks` (id, title, files) and `workflow` exactly. `phases` is `[]` (the plan already exists).
+**Precise mode:** run `<cli> plan "<plan path>"`. Use its `tasks` (id, title, files) and `workflow` exactly. `phases` is `[]` (the plan already exists). The CLI drops tasks whose checkboxes are all ticked, so an estimate made mid-plan covers only the remaining work.
 
 **Rough mode:** look at only:
 - the file tree, 3 levels deep, skipping `node_modules`, `.git`, `dist`, `build`, `.next`
 - the first 200 lines of the README, if there is one
 
-Then split the request into tasks, each the size of one implementer-subagent job. Aim for 5–8 tasks (min 3, max 12). One task = one user-visible capability or one cohesive change touching about 1–3 files. Merge anything under ~5 minutes of work into a neighbour. Number them from 1. Fill `files` with likely paths from the tree; leave it `[]` when unsure.
+Then split the request into tasks, each the size of one implementer-subagent job. Use as few tasks as the work needs: a small single change (one screen/component/endpoint) 1–3 tasks; a medium feature 3–6; a large multi-part build 6–12. One task = one user-visible capability or one cohesive change touching about 1–3 files. Merge anything under ~5 minutes of work into a neighbour. Number them from 1. Fill `files` with likely paths from the tree; leave it `[]` when unsure.
 - If `superpowers:subagent-driven-development` appears in your available skills: `workflow` = `"subagent-driven"`, `phases` = `["brainstorm", "spec", "plan"]`.
 - Otherwise: `workflow` = `"inline"`, `phases` = `[]`.
 
@@ -40,6 +40,7 @@ size:
 - S = one file, small change
 - M = 2–3 files, or one substantial file
 - L = 4+ files, or a new subsystem
+- Only tag L when the task clearly spans many files or steps; a task in a small change is rarely L.
 - Precise mode: each task has a `steps` count. Read each task's body in the plan file at <plan path> before tagging. Size = the larger of the file rule above and the step rule: ≤5 steps S, 6–9 steps M, 10+ steps L.
 - If torn between two sizes, pick M.
 
