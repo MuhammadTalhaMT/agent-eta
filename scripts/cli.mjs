@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import { dataDir, loadDefaults, loadCalibration, effectiveParams, calibrationStatus } from './lib/config.mjs';
 import { estimate } from './estimate.mjs';
 import { speedups } from './speedups.mjs';
@@ -32,10 +32,28 @@ function positional(args) {
   return out;
 }
 
+class InputError extends Error {}
+
 const percent = (actual, predicted) => {
+  if (!Number.isFinite(predicted) || predicted === 0 || !Number.isFinite(actual)) return '—';
   const p = Math.round(((actual - predicted) / predicted) * 100);
   return `${p > 0 ? '+' : ''}${p}%`;
 };
+
+const sameProject = (a, b) => (process.platform === 'win32' ? a?.toLowerCase() === b?.toLowerCase() : a === b);
+
+function requireArg(value, what) {
+  if (!value) throw new InputError(`Missing argument: ${what}`);
+  return value;
+}
+
+function readInput(path, what) {
+  try {
+    return readFileSync(path, 'utf8');
+  } catch (e) {
+    throw new InputError(`Cannot read ${what} file: ${path} (${e.code ?? e.message})`);
+  }
+}
 
 function safeMeasure(ctx) {
   try {
@@ -53,6 +71,24 @@ export function main(argv, {
   out = s => process.stdout.write(`${s}\n`),
   err = s => process.stderr.write(`${s}\n`),
 } = {}) {
+  try {
+    return run(argv, { env, cwd, now, out, err });
+  } catch (e) {
+    if (e instanceof InputError) {
+      err(e.message);
+      return 2;
+    }
+    err(`agent-eta: ${e?.message ?? e}`);
+    try {
+      logError(dataDir(env), `cli failed: ${e?.stack || e}`);
+    } catch {
+      // data dir unavailable
+    }
+    return 1;
+  }
+}
+
+function run(argv, { env, cwd, now, out, err }) {
   const [cmd, ...args] = argv;
   const pos = positional(args);
   const dir = dataDir(env);
@@ -63,13 +99,20 @@ export function main(argv, {
 
   switch (cmd) {
     case 'plan': {
-      out(JSON.stringify(parsePlan(readFileSync(pos[0], 'utf8')), null, 2));
+      out(JSON.stringify(parsePlan(readInput(requireArg(pos[0], 'plan file'), 'plan')), null, 2));
       return 0;
     }
 
     case 'estimate': {
       safeMeasure(ctx);
-      const input = JSON.parse(readFileSync(pos[0], 'utf8'));
+      const tagsPath = requireArg(pos[0], 'tags file');
+      let input;
+      try {
+        input = JSON.parse(readInput(tagsPath, 'tags'));
+      } catch (e) {
+        if (e instanceof InputError) throw e;
+        throw new InputError(`Invalid JSON in tags file ${tagsPath}: ${e.message}`);
+      }
       const { calibration, warning } = loadCalibration(dir);
       const params = effectiveParams(defaults, calibration);
       let est;
@@ -79,8 +122,13 @@ export function main(argv, {
         err(e.message);
         return 2;
       }
+      const calibrationActive = calibration.confirmed >= defaults.minConfirmed;
       const tips = speedups(input, params, est);
-      const planPath = option(args, '--plan');
+      let planPath = option(args, '--plan');
+      if (planPath && !existsSync(resolve(project, planPath))) {
+        err(`Plan file not found: ${planPath}. Saving as a rough estimate.`);
+        planPath = undefined;
+      }
       const record = {
         id: newId(now),
         project,
@@ -97,6 +145,9 @@ export function main(argv, {
           low: est.low,
           high: est.high,
           perTask: est.tasks.map(({ id, title, kind, size, agent }) => ({ id, title, kind, size, agent })),
+          applied: calibrationActive
+            ? { cells: { ...calibration.cells }, workflow: calibration.workflow?.[est.workflow] ?? 1 }
+            : { cells: {}, workflow: 1 },
         },
         status: 'open',
       };
@@ -113,7 +164,7 @@ export function main(argv, {
       const records = readRecords(dir);
       const target = pos[0]
         ? records.find(r => r.id === pos[0] && r.status === 'open')
-        : [...records].reverse().find(r => r.status === 'open' && r.project === project);
+        : [...records].reverse().find(r => r.status === 'open' && sameProject(r.project, project));
       if (!target) {
         out('No open estimate for this project.');
         return 1;
@@ -122,7 +173,7 @@ export function main(argv, {
       writeRecords(dir, records);
       const result = safeMeasure(ctx);
       const r = result?.records.find(x => x.id === target.id);
-      if (r?.status === 'confirmed') {
+      if (r?.status === 'confirmed' && r.predicted && r.actual) {
         out(`Estimate ${r.id} confirmed. Predicted ~${formatDuration(r.predicted.wall)}, actual ~${formatDuration(r.actual.wall)} (${percent(r.actual.wall, r.predicted.wall)}).`);
       } else {
         out(`Estimate ${target.id} could not be measured (${r?.reason ?? 'measurement failed'}). It won't be used for learning.`);
@@ -132,16 +183,17 @@ export function main(argv, {
 
     case 'stats': {
       const result = safeMeasure(ctx) ?? { records: readRecords(dir), calibration: loadCalibration(dir).calibration };
-      const confirmed = result.records.filter(r => r.status === 'confirmed').slice(-10);
+      const confirmed = result.records.filter(r => r.status === 'confirmed' && Number.isFinite(r.predicted?.wall) && Number.isFinite(r.actual?.wall)).slice(-10);
       const lines = [];
       if (!confirmed.length) {
         lines.push('No confirmed estimates yet. Run /agent-eta:eta-done when estimated work is finished.');
       } else {
         lines.push(`agent-eta — last ${confirmed.length} confirmed estimate${confirmed.length === 1 ? '' : 's'}`);
         for (const r of confirmed) {
-          lines.push(`  ${r.id}  ${r.startedAt.slice(0, 10)}  predicted ${formatDuration(r.predicted.wall)}  actual ${formatDuration(r.actual.wall)}  ${percent(r.actual.wall, r.predicted.wall)}`);
+          lines.push(`  ${r.id}  ${String(r.startedAt ?? '').slice(0, 10)}  predicted ${formatDuration(r.predicted.wall)}  actual ${formatDuration(r.actual.wall)}  ${percent(r.actual.wall, r.predicted.wall)}`);
         }
-        const avg = confirmed.reduce((s, r) => s + (r.actual.wall - r.predicted.wall) / r.predicted.wall, 0) / confirmed.length;
+        const scored = confirmed.filter(r => r.predicted.wall > 0);
+        const avg = scored.length ? scored.reduce((s, r) => s + (r.actual.wall - r.predicted.wall) / r.predicted.wall, 0) / scored.length : 0;
         const sign = Math.round(avg * 100);
         lines.push(`Average error: ${sign > 0 ? '+' : ''}${sign}% (${sign > 0 ? 'estimates run low' : sign < 0 ? 'estimates run high' : 'on target'})`);
       }
@@ -149,10 +201,11 @@ export function main(argv, {
       const unconfirmed = result.records.filter(r => r.status === 'unconfirmed').length;
       lines.push(`Open: ${open} · Unconfirmed: ${unconfirmed}`);
       const cal = result.calibration;
+      const finite = ([, v]) => Number.isFinite(v);
       const corr = [
-        ...Object.entries(cal.cells).map(([k, v]) => `${k} ×${v.toFixed(2)}`),
-        ...Object.entries(cal.workflow).map(([k, v]) => `workflow ${k} ×${v.toFixed(2)}`),
-        ...(cal.replyDelay != null ? [`reply delay ${cal.replyDelay.toFixed(1)} min`] : []),
+        ...Object.entries(cal.cells ?? {}).filter(finite).map(([k, v]) => `${k} ×${v.toFixed(2)}`),
+        ...Object.entries(cal.workflow ?? {}).filter(finite).map(([k, v]) => `workflow ${k} ×${v.toFixed(2)}`),
+        ...(Number.isFinite(cal.replyDelay) ? [`reply delay ${cal.replyDelay.toFixed(1)} min`] : []),
       ];
       if (corr.length) lines.push(`Corrections: ${corr.join(', ')}`);
       lines.push(`Calibration: ${calibrationStatus(defaults, cal)}`);
@@ -172,6 +225,14 @@ export function main(argv, {
   }
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+function isEntry() {
+  try {
+    return realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return false;
+  }
+}
+
+if (isEntry()) {
   process.exitCode = main(process.argv.slice(2));
 }

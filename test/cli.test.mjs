@@ -4,7 +4,9 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { main } from '../scripts/cli.mjs';
 import { encodeProjectPath } from '../scripts/lib/transcripts.mjs';
-import { readRecords } from '../scripts/lib/store.mjs';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { readRecords, appendRecord, saveCalibration } from '../scripts/lib/store.mjs';
 import { tmp } from './helpers.mjs';
 
 const T = hhmm => `2026-01-01T${hhmm}:00.000Z`;
@@ -123,4 +125,84 @@ test('unknown command prints usage and exits 1', () => {
   const h = harness();
   assert.equal(h.run(['nope']), 1);
   assert.match(h.out(), /Usage:/);
+});
+
+test('estimate records the multipliers actually applied (none before minConfirmed)', () => {
+  const h = harness();
+  h.run(['estimate', tagsFile(TAGS)]);
+  assert.deepEqual(readRecords(h.home)[0].predicted.applied, { cells: {}, workflow: 1 });
+});
+
+test('estimate records active calibration multipliers once personal', () => {
+  const h = harness();
+  saveCalibration(h.home, { confirmed: 3, cells: { 'integration.M': 1.4 }, workflow: { inline: 1.2 }, replyDelay: null });
+  h.run(['estimate', tagsFile(TAGS)]);
+  assert.deepEqual(readRecords(h.home)[0].predicted.applied, { cells: { 'integration.M': 1.4 }, workflow: 1.2 });
+});
+
+test('inactive calibration (below minConfirmed) is not recorded as applied', () => {
+  const h = harness();
+  saveCalibration(h.home, { confirmed: 1, cells: { 'integration.M': 1.4 }, workflow: { inline: 1.2 }, replyDelay: null });
+  h.run(['estimate', tagsFile(TAGS)]);
+  assert.deepEqual(readRecords(h.home)[0].predicted.applied, { cells: {}, workflow: 1 });
+});
+
+test('stats and done survive corrupt records', () => {
+  const h = harness();
+  appendRecord(h.home, { id: 'x1', project: resolve(PROJECT), startedAt: T('09:00'), status: 'confirmed' });
+  appendRecord(h.home, { id: 'x2', project: resolve(PROJECT), startedAt: T('09:00'), status: 'confirmed', predicted: { wall: 0 }, actual: { wall: 5 } });
+  saveCalibration(h.home, { confirmed: 0, cells: { 'a.b': 'oops' }, workflow: {}, replyDelay: 'bad' });
+  assert.equal(h.run(['stats']), 0);
+  assert.doesNotMatch(h.out(), /NaN|undefined/);
+  assert.equal(h.run(['done']), 1);
+});
+
+test('missing or unreadable inputs exit 2 without throwing', () => {
+  const h = harness();
+  const missing = join(tmp(), 'nope.json');
+  assert.equal(h.run(['plan', missing]), 2);
+  assert.equal(h.run(['plan']), 2);
+  assert.equal(h.run(['estimate', missing]), 2);
+  assert.equal(h.run(['estimate']), 2);
+  const bad = join(tmp(), 'bad.json');
+  writeFileSync(bad, '{not json');
+  assert.equal(h.run(['estimate', bad]), 2);
+  assert.match(h.err(), /Invalid JSON/);
+  assert.equal(readRecords(h.home).length, 0);
+});
+
+test('unexpected errors return 1 with a one-line message and log', () => {
+  const home = tmp();
+  const errs = [];
+  const code = main(['stats'], {
+    env: { AGENT_ETA_HOME: join(home, 'file.txt', 'x'), AGENT_ETA_PROJECTS: tmp() },
+    cwd: PROJECT, now: at('10:00'), out: () => {}, err: s => errs.push(s),
+  });
+  assert.ok(code === 0 || code === 1);
+  assert.doesNotMatch(errs.join('\n'), /\n\s+at /);
+});
+
+test('--plan with a missing file falls back to rough mode with a warning', () => {
+  const h = harness();
+  assert.equal(h.run(['estimate', tagsFile(TAGS), '--plan', join(tmp(), 'gone.md')]), 0);
+  const [r] = readRecords(h.home);
+  assert.equal(r.mode, 'rough');
+  assert.equal(r.planPath, null);
+  assert.match(h.err(), /Plan file not found/);
+});
+
+test('done matches the project case-insensitively on Windows', { skip: process.platform !== 'win32' }, () => {
+  const h = harness();
+  h.run(['estimate', tagsFile(TAGS)]);
+  const other = (resolve(PROJECT).toUpperCase());
+  const code = main(['done'], {
+    env: { AGENT_ETA_HOME: h.home, AGENT_ETA_PROJECTS: h.projects },
+    cwd: other, now: at('10:30'), out: () => {}, err: () => {},
+  });
+  assert.equal(code, 0);
+});
+
+test('entry guard runs main when invoked through the real script path', () => {
+  const r = spawnSync(process.execPath, [fileURLToPath(new URL('../scripts/cli.mjs', import.meta.url)), 'nope'], { encoding: 'utf8' });
+  assert.match(r.stdout, /Usage:/);
 });
