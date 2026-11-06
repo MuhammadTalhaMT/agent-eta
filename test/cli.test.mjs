@@ -122,6 +122,36 @@ test('done stores its own session id on the record', () => {
   assert.equal(r.doneSessionId, 'sess-done');
 });
 
+test('done explains when the build was not visible in the transcripts', () => {
+  const h = harness();
+  h.run(['estimate', tagsFile(TAGS)], at('10:00'));
+  const dir = join(h.projects, encodeProjectPath(PROJECT));
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 's.jsonl'), [
+    JSON.stringify({ type: 'assistant', timestamp: T('10:00'), message: { content: [{ type: 'text', text: 'x' }] } }),
+    JSON.stringify({ type: 'assistant', timestamp: T('10:01'), message: { content: [{ type: 'text', text: 'x' }] } }),
+  ].join('\n'));
+  assert.equal(h.run(['done'], at('11:30')), 0);
+  assert.match(h.out(), /couldn't see the build in this session's transcripts.*not used for learning/);
+  assert.equal(readRecords(h.home)[0].status, 'unconfirmed');
+});
+
+test('done says it will retry when measurement fails outright', () => {
+  const h = harness();
+  h.run(['estimate', tagsFile(TAGS)], at('10:00'));
+  const outLines = [];
+  main(['done'], {
+    env: { AGENT_ETA_HOME: h.home, AGENT_ETA_PROJECTS: h.projects },
+    cwd: PROJECT, now: at('10:30'), out: s => outLines.push(s), err: () => {},
+    measure: () => { throw new Error('disk on fire'); },
+  });
+  assert.match(outLines.join(String.fromCharCode(10)), /measured again on the next/);
+  assert.doesNotMatch(outLines.join(String.fromCharCode(10)), /won't be used for learning|not used for learning/);
+  const [r] = readRecords(h.home);
+  assert.equal(r.status, 'open');
+  assert.ok(r.doneAt);
+});
+
 test('done with nothing open exits 1', () => {
   const h = harness();
   assert.equal(h.run(['done']), 1);

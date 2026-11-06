@@ -228,3 +228,16 @@ test('runMeasure counts work done in the /eta-done session as well as the /eta s
   assert.equal(r.status, 'confirmed');
   near(r.actual.agentMinutes, 25);
 });
+
+test('runMeasure marks a near-zero actual unconfirmed and does not learn from it', () => {
+  const dir = tmp();
+  const root = tmp();
+  transcripts(root); // 15 agent minutes
+  appendRecord(dir, record({ doneAt: T('10:30'), predicted: { ...record().predicted, agentMinutes: 100 } }));
+  runMeasure({ dir, defaults: testParams(), now: Date.parse(T('12:00')), root });
+  const [r] = readRecords(dir);
+  assert.equal(r.status, 'unconfirmed');
+  assert.match(r.reason, /couldn't see the build/);
+  assert.equal(r.actual, undefined);
+  assert.equal(loadCalibration(dir).calibration.confirmed, 0);
+});

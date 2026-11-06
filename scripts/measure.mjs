@@ -4,6 +4,11 @@ import { parsePlan } from './lib/plan.mjs';
 import { projectsRoot, encodeProjectPath, measureWindow, subagentRuns } from './lib/transcripts.mjs';
 import { readRecords, updateRecords, saveCalibration, logError } from './lib/store.mjs';
 import { loadCalibration } from './lib/config.mjs';
+import { formatDuration } from './lib/format.mjs';
+
+// Below this share of the predicted agent time we assume the build happened somewhere we can't
+// see (another session, another machine) rather than that it really took a few minutes.
+export const MIN_ACTUAL_SHARE = 0.2;
 
 // Move `old` toward clamp(ratio) * applied, where `applied` is the multiplier that was
 // actually in force when the prediction was made (defaults to `old`).
@@ -94,6 +99,13 @@ export function runMeasure({ dir, defaults, now = Date.now(), root = projectsRoo
         r.status = 'unconfirmed';
         r.reason = 'no transcript activity found';
         logError(dir, `${r.id}: no transcript activity in ${projectDir}`);
+        continue;
+      }
+
+      const predictedAgent = r.predicted?.agentMinutes;
+      if (Number.isFinite(predictedAgent) && actual.agentMinutes < MIN_ACTUAL_SHARE * predictedAgent) {
+        r.status = 'unconfirmed';
+        r.reason = `couldn't see the build in this session's transcripts (measured ~${formatDuration(actual.agentMinutes)} of agent time vs ~${formatDuration(predictedAgent)} predicted)`;
         continue;
       }
 

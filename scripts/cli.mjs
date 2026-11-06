@@ -57,7 +57,7 @@ function readInput(path, what) {
 
 function safeMeasure(ctx) {
   try {
-    return runMeasure(ctx);
+    return ctx.measure(ctx);
   } catch (e) {
     logError(ctx.dir, `measure failed: ${e.stack || e}`);
     return null;
@@ -70,9 +70,10 @@ export function main(argv, {
   now = Date.now(),
   out = s => process.stdout.write(`${s}\n`),
   err = s => process.stderr.write(`${s}\n`),
+  measure = runMeasure, // test seam
 } = {}) {
   try {
-    return run(argv, { env, cwd, now, out, err });
+    return run(argv, { env, cwd, now, out, err, measure });
   } catch (e) {
     if (e instanceof InputError) {
       err(e.message);
@@ -88,14 +89,14 @@ export function main(argv, {
   }
 }
 
-function run(argv, { env, cwd, now, out, err }) {
+function run(argv, { env, cwd, now, out, err, measure }) {
   const [cmd, ...args] = argv;
   const pos = positional(args);
   const dir = dataDir(env);
   const defaults = loadDefaults();
   const root = projectsRoot(env);
   const project = resolve(option(args, '--project') ?? cwd);
-  const ctx = { dir, defaults, now, root };
+  const ctx = { dir, defaults, now, root, measure };
 
   switch (cmd) {
     case 'plan': {
@@ -176,8 +177,10 @@ function run(argv, { env, cwd, now, out, err }) {
       const r = result?.records.find(x => x.id === target.id);
       if (r?.status === 'confirmed' && r.predicted && r.actual) {
         out(`Estimate ${r.id} confirmed. Predicted ~${formatDuration(r.predicted.wall)}, actual ~${formatDuration(r.actual.wall)} (${percent(r.actual.wall, r.predicted.wall)}).`);
+      } else if (r?.status === 'unconfirmed') {
+        out(`Estimate ${r.id}: ${r.reason ?? 'could not be measured'} — not used for learning.`);
       } else {
-        out(`Estimate ${target.id} could not be measured (${r?.reason ?? 'measurement failed'}). It won't be used for learning.`);
+        out(`Estimate ${target.id} couldn't be measured right now. It stays marked done and will be measured again on the next /agent-eta:eta.`);
       }
       return 0;
     }
