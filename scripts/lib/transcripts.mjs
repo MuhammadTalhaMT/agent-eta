@@ -58,14 +58,18 @@ export function readEntries(file, window = null) {
   return out;
 }
 
-export function transcriptFiles(projectDir, sessionId = null) {
+// `sessionIds`: one id, a list of ids (their union is read), or null for every session in the folder.
+export function transcriptFiles(projectDir, sessionIds = null) {
   const out = { main: [], subagents: [] };
   if (!existsSync(projectDir)) return out;
-  if (sessionId) {
-    const main = join(projectDir, `${sessionId}.jsonl`);
-    if (existsSync(main)) out.main.push(main);
-    const sub = join(projectDir, sessionId, 'subagents');
-    if (existsSync(sub)) for (const f of readdirSync(sub)) if (f.endsWith('.jsonl')) out.subagents.push(join(sub, f));
+  const ids = [...new Set([sessionIds].flat().filter(Boolean))];
+  if (ids.length) {
+    for (const id of ids) {
+      const main = join(projectDir, `${id}.jsonl`);
+      if (existsSync(main)) out.main.push(main);
+      const sub = join(projectDir, id, 'subagents');
+      if (existsSync(sub)) for (const f of readdirSync(sub)) if (f.endsWith('.jsonl')) out.subagents.push(join(sub, f));
+    }
     return out;
   }
   for (const entry of readdirSync(projectDir, { withFileTypes: true })) {
@@ -89,8 +93,8 @@ const touchedSince = (file, startMs) => {
   }
 };
 
-export function measureWindow(projectDir, startMs, endMs, breakMinutes, sessionId = null) {
-  const { main, subagents } = transcriptFiles(projectDir, sessionId);
+export function measureWindow(projectDir, startMs, endMs, breakMinutes, sessionIds = null) {
+  const { main, subagents } = transcriptFiles(projectDir, sessionIds);
   const entries = [];
   for (const f of [...main, ...subagents]) {
     if (!touchedSince(f, startMs)) continue;
@@ -121,9 +125,9 @@ export function measureWindow(projectDir, startMs, endMs, breakMinutes, sessionI
   return { agentMinutes, userMinutes, humanGaps, humanGapMedian, entries: entries.length };
 }
 
-export function subagentRuns(projectDir, startMs, endMs, sessionId = null) {
+export function subagentRuns(projectDir, startMs, endMs, sessionIds = null) {
   const runs = [];
-  for (const f of transcriptFiles(projectDir, sessionId).subagents) {
+  for (const f of transcriptFiles(projectDir, sessionIds).subagents) {
     if (!touchedSince(f, startMs)) continue;
     const es = readEntries(f, { startMs, endMs }).filter(e => e.ts >= startMs && e.ts <= endMs);
     if (es.length < 2) continue;

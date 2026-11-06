@@ -118,3 +118,14 @@ test('sessionId filter excludes other sessions; null includes them', () => {
   assert.equal(subagentRuns(dir, ms('10:00'), ms('11:30'), 'sess-1').length, 1);
   assert.equal(subagentRuns(dir, ms('10:00'), ms('11:30')).length, 2);
 });
+
+test('a list of session ids reads the union of those sessions only', () => {
+  const dir = twoSessions();
+  writeFileSync(join(dir, 'sess-3.jsonl'), [assistant('10:40'), assistant('10:45')].join(String.fromCharCode(10)));
+  const both = transcriptFiles(dir, ['sess-1', 'sess-2']);
+  assert.equal(both.main.length, 2);
+  assert.equal(both.subagents.length, 2);
+  assert.equal(transcriptFiles(dir, ['sess-1', 'sess-1']).main.length, 1);
+  assert.equal(measureWindow(dir, ms('10:00'), ms('11:30'), 30, ['sess-1', 'sess-2']).entries, 13);
+  assert.equal(subagentRuns(dir, ms('10:00'), ms('11:30'), ['sess-1', 'sess-2']).length, 2);
+});

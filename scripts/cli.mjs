@@ -170,6 +170,7 @@ function run(argv, { env, cwd, now, out, err }) {
         return 1;
       }
       target.doneAt = new Date(now).toISOString();
+      target.doneSessionId = env.CLAUDE_CODE_SESSION_ID ?? null;
       updateRecords(dir, [target]);
       const result = safeMeasure(ctx);
       const r = result?.records.find(x => x.id === target.id);

@@ -109,6 +109,19 @@ test('done measures the latest open estimate for this project', () => {
   assert.equal(readRecords(h.home)[0].status, 'confirmed');
 });
 
+test('done stores its own session id on the record', () => {
+  const home = tmp();
+  const io = sid => ({
+    env: { AGENT_ETA_HOME: home, AGENT_ETA_PROJECTS: tmp(), CLAUDE_CODE_SESSION_ID: sid },
+    cwd: PROJECT, out: () => {}, err: () => {},
+  });
+  main(['estimate', tagsFile(TAGS)], { ...io('sess-eta'), now: at('10:00') });
+  main(['done'], { ...io('sess-done'), now: at('10:30') });
+  const [r] = readRecords(home);
+  assert.equal(r.sessionId, 'sess-eta');
+  assert.equal(r.doneSessionId, 'sess-done');
+});
+
 test('done with nothing open exits 1', () => {
   const h = harness();
   assert.equal(h.run(['done']), 1);

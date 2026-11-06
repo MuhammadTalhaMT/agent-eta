@@ -212,3 +212,19 @@ test('runMeasure keeps a record appended by another session while it was measuri
   assert.equal(byId.mine.status, 'confirmed');
   assert.equal(byId['appended-meanwhile']?.status, 'open');
 });
+
+test('runMeasure counts work done in the /eta-done session as well as the /eta session', () => {
+  const dir = tmp();
+  const root = tmp();
+  const pdir = join(root, encodeProjectPath(PROJECT));
+  mkdirSync(pdir, { recursive: true });
+  // session A: only the /eta turn; session B (after /clear): the real build
+  writeFileSync(join(pdir, 'A.jsonl'), [assistant('10:00'), assistant('10:01')].join('\n'));
+  writeFileSync(join(pdir, 'B.jsonl'), [assistant('10:05'), assistant('10:15'), assistant('10:25')].join('\n'));
+  writeFileSync(join(pdir, 'unrelated.jsonl'), [assistant('10:02'), assistant('10:28')].join('\n'));
+  appendRecord(dir, record({ sessionId: 'A', doneSessionId: 'B', doneAt: T('10:30') }));
+  runMeasure({ dir, defaults: testParams(), now: Date.parse(T('12:00')), root });
+  const [r] = readRecords(dir);
+  assert.equal(r.status, 'confirmed');
+  near(r.actual.agentMinutes, 25);
+});

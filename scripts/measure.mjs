@@ -86,8 +86,10 @@ export function runMeasure({ dir, defaults, now = Date.now(), root = projectsRoo
       const projectDir = join(root, encodeProjectPath(r.project));
       const startMs = Date.parse(r.startedAt);
       r.doneAt = new Date(d.doneAt).toISOString();
-      const sessionId = r.sessionId ?? null;
-      const actual = window(projectDir, startMs, d.doneAt, defaults.breakMinutes, sessionId);
+      // The /eta session plus the /eta-done session (work often continues after /clear).
+      // No session id at all (older Claude Code) → whole project folder.
+      const sessions = r.sessionId ? [r.sessionId, r.doneSessionId].filter(Boolean) : null;
+      const actual = window(projectDir, startMs, d.doneAt, defaults.breakMinutes, sessions);
       if (actual.entries < 2) {
         r.status = 'unconfirmed';
         r.reason = 'no transcript activity found';
@@ -96,7 +98,7 @@ export function runMeasure({ dir, defaults, now = Date.now(), root = projectsRoo
       }
 
       const matched = r.mode === 'precise'
-        ? matchTasks(r.predicted.perTask, subagentRuns(projectDir, startMs, d.doneAt, sessionId))
+        ? matchTasks(r.predicted.perTask, subagentRuns(projectDir, startMs, d.doneAt, sessions))
         : [];
       const next = applyLearning(calibration, r, actual, matched, defaults);
       r.status = 'confirmed';
