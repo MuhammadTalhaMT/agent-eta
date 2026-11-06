@@ -72,12 +72,14 @@ test('measureWindow splits agent and user time and drops breaks', () => {
   near(m.agentMinutes, 17);
   near(m.userMinutes, 4);
   assert.equal(m.humanGaps, 1);
+  near(m.humanGapMedian, 4);
   assert.equal(m.entries, 9);
 });
 
 test('measureWindow on a missing folder is empty', () => {
   const m = measureWindow(join(tmp(), 'nope'), 0, Date.now(), 30);
   assert.equal(m.entries, 0);
+  assert.equal(m.humanGapMedian, null);
 });
 
 test('subagentRuns reads description and duration', () => {

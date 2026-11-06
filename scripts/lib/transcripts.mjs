@@ -102,17 +102,23 @@ export function measureWindow(projectDir, startMs, endMs, breakMinutes, sessionI
   let agentMinutes = 0;
   let userMinutes = 0;
   let humanGaps = 0;
+  const humanGapList = [];
   for (let i = 1; i < entries.length; i++) {
     const gap = entries[i].ts - entries[i - 1].ts;
     if (gap > breakMs) continue;
     if (entries[i].human) {
       userMinutes += gap / 60000;
       humanGaps++;
+      humanGapList.push(gap / 60000);
     } else {
       agentMinutes += gap / 60000;
     }
   }
-  return { agentMinutes, userMinutes, humanGaps, entries: entries.length };
+  humanGapList.sort((a, b) => a - b);
+  const mid = humanGapList.length >> 1;
+  const humanGapMedian = humanGapList.length === 0 ? null
+    : humanGapList.length % 2 ? humanGapList[mid] : (humanGapList[mid - 1] + humanGapList[mid]) / 2;
+  return { agentMinutes, userMinutes, humanGaps, humanGapMedian, entries: entries.length };
 }
 
 export function subagentRuns(projectDir, startMs, endMs, sessionId = null) {
