@@ -24,8 +24,8 @@ You only break the work into tagged tasks. A script does all the maths. **Never 
 - the file tree, 3 levels deep, skipping `node_modules`, `.git`, `dist`, `build`, `.next`
 - the first 200 lines of the README, if there is one
 
-Then split the request into 3–12 tasks, each the size of one implementer-subagent job. Number them from 1. Fill `files` with likely paths from the tree; leave it `[]` when unsure.
-- If `superpowers:brainstorming` appears in your available skills: `workflow` = `"subagent-driven"`, `phases` = `["brainstorm", "spec", "plan"]`.
+Then split the request into tasks, each the size of one implementer-subagent job. Aim for 5–8 tasks (min 3, max 12). One task = one user-visible capability or one cohesive change touching about 1–3 files. Merge anything under ~5 minutes of work into a neighbour. Number them from 1. Fill `files` with likely paths from the tree; leave it `[]` when unsure.
+- If `superpowers:subagent-driven-development` appears in your available skills: `workflow` = `"subagent-driven"`, `phases` = `["brainstorm", "spec", "plan"]`.
 - Otherwise: `workflow` = `"inline"`, `phases` = `[]`.
 
 ## 3. Tag the tasks
@@ -40,26 +40,34 @@ size:
 - S = one file, small change
 - M = 2–3 files, or one substantial file
 - L = 4+ files, or a new subsystem
+- Precise mode: each task has a `steps` count. Read each task's body in the plan file at <plan path> before tagging. Size = the larger of the file rule above and the step rule: ≤5 steps S, 6–9 steps M, 10+ steps L.
+- If torn between two sizes, pick M.
 
 kind:
 - mechanical = the spec says exactly what to write; no decisions
 - integration = wiring parts together, several files, or calling an external API
 - judgment = design decisions, debugging, unclear requirements, or UI that needs taste
+- If torn between kinds, pick integration. Use judgment only when the request leaves the behaviour undecided (design choices, debugging an unknown cause, taste-driven UI).
+- Examples: mechanical = "add a field to an existing form and its validation"; integration = "wire a new API route to the database and the UI"; judgment = "design the onboarding flow" or "find why login randomly fails".
 
 flags (zero or more):
 - manual_test = a human must check it by hand (UI look, game feel, device, real payment, email arriving)
 - external_service = depends on a third-party service, API key, webhook or network
 - new_dependency = installs a new package or tool
 
+Add a flag only when it is clearly true.
+
 depends_on = ids of tasks whose code or output this task needs. Only real dependencies.
 
 Tasks:
-<paste: workflow, phases, and each task's id, title, files, and one-line description>
+<paste: workflow, phases, and each task's id, title, files, steps (precise mode), the plan path (precise mode), and one-line description>
 ```
 
 ## 4. Run the estimate
 
-Save the JSON to a temp file (your scratchpad if you have one, else the OS temp folder). Then:
+After the tagger replies, overwrite `workflow`, `phases` and each task's `title` and `files` in its JSON with the values you decided yourself (do not trust the tagger to echo them). Keep only the tagger's `size`, `kind`, `flags` and `depends_on`.
+
+Write the JSON with the Write tool to an absolute path in your scratchpad directory if you have one, else the OS temp dir (`$TEMP` / `%TEMP%`). Never use `/tmp`. Pass that same absolute path to the CLI with forward slashes, in double quotes. Then:
 - rough: `<cli> estimate "<json file>"`
 - precise: `<cli> estimate "<json file>" --plan "<plan path>"`
 
@@ -67,4 +75,4 @@ If it exits with `Invalid tags: <field> …`, fix that one field and run again *
 
 ## 5. Show the result
 
-Print the script output exactly as-is inside a code block. Add nothing before it. After it, add at most one line, only if one speed-up needs explaining (for example how to set up git worktrees).
+Print the script output exactly as-is inside a code block. Add nothing before it. After it, add at most one line, only if one speed-up needs explaining (for example how to set up git worktrees). If the CLI's stderr shows a plan-file warning, mention it in one line after the output.

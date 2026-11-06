@@ -11,4 +11,4 @@ Run from the user's project directory:
 
 `<base>` is the "Base directory for this skill" shown when this skill loaded.
 
-Print the output as-is in a code block. Add nothing else.
+Print the output as-is in a code block, including when the command exits non-zero. Add nothing else.
