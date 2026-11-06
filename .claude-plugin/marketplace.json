@@ -1,0 +1,12 @@
+{
+  "name": "agent-eta",
+  "owner": { "name": "Muhammad Talha" },
+  "plugins": [
+    {
+      "name": "agent-eta",
+      "source": "./",
+      "description": "Realistic build-time estimates for Claude Code work: agent time vs your time, risk, and speed-ups.",
+      "version": "0.1.0"
+    }
+  ]
+}
