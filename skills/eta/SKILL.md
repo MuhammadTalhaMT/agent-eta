@@ -24,7 +24,7 @@ You only break the work into tagged tasks. A script does all the maths. **Never 
 - the file tree, 3 levels deep, skipping `node_modules`, `.git`, `dist`, `build`, `.next`
 - the first 200 lines of the README, if there is one
 
-Then split the request into tasks, each the size of one implementer-subagent job. Use as few tasks as the work needs: a small single change (one screen/component/endpoint) 1–3 tasks; a medium feature 3–6; a large multi-part build 6–12. One task = one user-visible capability or one cohesive change touching about 1–3 files. Merge anything under ~5 minutes of work into a neighbour. Number them from 1. Fill `files` with likely paths from the tree; leave it `[]` when unsure.
+Then split the request into tasks, each the size of one implementer-subagent job. Use as few tasks as the work needs: a small single change (one screen/component/endpoint) 1–3 tasks; a medium feature 3–6; a large multi-part build 6–12. Decide which of these the request is — `small`, `medium` or `large` — and remember it as the **request size** for step 3. For a small change, prefer fewer tasks: split only when two parts touch different files AND could be reviewed separately. One task = one user-visible capability or one cohesive change touching about 1–3 files. Merge anything under ~5 minutes of work into a neighbour. Number them from 1. Fill `files` with likely paths from the tree; leave it `[]` when unsure.
 - If `superpowers:subagent-driven-development` appears in your available skills: `workflow` = `"subagent-driven"`, `phases` = `["brainstorm", "spec", "plan"]`.
 - Otherwise: `workflow` = `"inline"`, `phases` = `[]`.
 
@@ -41,6 +41,7 @@ size:
 - M = 2–3 files, or one substantial file
 - L = 4+ files, or a new subsystem
 - Only tag L when the task clearly spans many files or steps; a task in a small change is rarely L.
+- Request size small → no task is L (use M at most). Ignore this in precise mode.
 - Precise mode: each task has a `steps` count. Read each task's body in the plan file at <plan path> before tagging. Size = the larger of the file rule above and the step rule: ≤5 steps S, 6–9 steps M, 10+ steps L.
 - If torn between two sizes, pick M.
 
@@ -48,6 +49,7 @@ kind:
 - mechanical = the spec says exactly what to write; no decisions
 - integration = wiring parts together, several files, or calling an external API
 - judgment = design decisions, debugging, unclear requirements, or UI that needs taste
+- Applying colours or styles across existing screens is integration unless the request asks to design the look.
 - If torn between kinds, pick integration. Use judgment only when the request leaves the behaviour undecided (design choices, debugging an unknown cause, taste-driven UI).
 - Examples: mechanical = "add a field to an existing form and its validation"; integration = "wire a new API route to the database and the UI"; judgment = "design the onboarding flow" or "find why login randomly fails".
 
@@ -59,6 +61,8 @@ flags (zero or more):
 Add a flag only when it is clearly true.
 
 depends_on = ids of tasks whose code or output this task needs. Only real dependencies.
+
+Request size: <small | medium | large; "precise" in precise mode>
 
 Tasks:
 <paste: workflow, phases, and each task's id, title, files, steps (precise mode), the plan path (precise mode), and one-line description>
