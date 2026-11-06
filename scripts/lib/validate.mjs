@@ -16,7 +16,10 @@ export function validateInput(input) {
 
   const phases = input.phases ?? [];
   if (!Array.isArray(phases)) fail('phases', 'must be an array');
-  phases.forEach((p, i) => { if (!PHASES.includes(p)) fail(`phases[${i}]`, oneOf(PHASES)); });
+  phases.forEach((p, i) => {
+    if (!PHASES.includes(p)) fail(`phases[${i}]`, oneOf(PHASES));
+    if (phases.indexOf(p) !== i) fail(`phases[${i}]`, `duplicates ${p}`);
+  });
 
   if (!Array.isArray(input.tasks) || input.tasks.length === 0) fail('tasks', 'must be a non-empty array');
 

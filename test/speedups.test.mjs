@@ -38,9 +38,21 @@ test('parallel tip picks the best pair and prices it by re-estimating', () => {
   assert.equal(tips[0].kind, 'parallel');
   near(tips[0].saved, 7);
   assert.match(tips[0].text, /Tasks 1 & 2/);
-  assert.equal(tips[1].kind, 'cheaper-model');
-  assert.equal(tips[1].saved, 0);
-  assert.match(tips[1].text, /Task 3 is mechanical/);
+  assert.equal(tips.length, 1);
+});
+
+test('cheaper-model tip only in subagent-driven workflow', () => {
+  const input = {
+    workflow: 'subagent-driven',
+    tasks: [
+      task(1, 'integration', 'M', { files: ['a.ts'] }),
+      task(2, 'integration', 'M', { files: ['b.ts'] }),
+      task(3, 'mechanical', 'S', { files: ['a.ts'], depends_on: [1] }),
+    ],
+  };
+  const tip = speedups(input, testParams()).find(t => t.kind === 'cheaper-model');
+  assert.equal(tip.saved, 0);
+  assert.match(tip.text, /Task 3 is mechanical/);
 });
 
 test('front-load tip for superpowers phases', () => {

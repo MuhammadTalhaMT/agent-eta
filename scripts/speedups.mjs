@@ -80,7 +80,7 @@ export function speedups(rawInput, params, base = estimate(rawInput, params)) {
     .slice(0, MAX_TIPS);
 
   const mech = input.tasks.filter(t => t.kind === 'mechanical').map(t => t.id);
-  if (mech.length && out.length < MAX_TIPS) {
+  if (input.workflow === 'subagent-driven' && mech.length && out.length < MAX_TIPS) {
     const many = mech.length > 1;
     out.push({
       kind: 'cheaper-model',

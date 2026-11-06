@@ -1,5 +1,5 @@
 export function formatDuration(minutes) {
-  const m = Math.max(0, Math.round(minutes));
+  const m = Number.isFinite(minutes) ? Math.max(0, Math.round(minutes)) : 0;
   if (m < 60) return `${m} min`;
   const h = Math.floor(m / 60);
   const r = m % 60;
@@ -23,9 +23,9 @@ export function formatReport(est, tips, status, warning = null) {
   ];
 
   if (tips.length) {
-    const total = tips.reduce((s, t) => s + t.saved, 0);
+    const total = tips.reduce((s, t) => s + Math.max(0, Math.round(t.saved)), 0);
     lines.push('', total >= 1 ? `Speed-ups (−${formatDuration(total)}):` : 'Speed-ups:');
-    for (const t of tips) lines.push(`  • ${t.text}${t.saved >= 1 ? ` (−${formatDuration(t.saved)})` : ''}`);
+    for (const t of tips) lines.push(`  • ${t.text}${Math.round(t.saved) >= 1 ? ` (−${formatDuration(t.saved)})` : ''}`);
   }
 
   lines.push('', `Calibration: ${status}`);

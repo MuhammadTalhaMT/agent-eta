@@ -9,6 +9,8 @@ test('formatDuration', () => {
   assert.equal(formatDuration(65), '1h 05m');
   assert.equal(formatDuration(125), '2h 05m');
   assert.equal(formatDuration(-3), '0 min');
+  assert.equal(formatDuration(NaN), '0 min');
+  assert.equal(formatDuration(Infinity), '0 min');
 });
 
 const est = {
@@ -44,4 +46,14 @@ test('report with no checkpoints and a warning', () => {
   const r = formatReport({ ...est, questions: 0, approvals: 0, manualTests: 0 }, [], 'x', 'calibration.json is corrupt');
   assert.match(r, /\(no checkpoints\)/);
   assert.match(r, /Warning: calibration.json is corrupt/);
+});
+
+test('speed-up total is the sum of rounded tip savings', () => {
+  const tips = [
+    { kind: 'parallel', saved: 7.4, text: 'A' },
+    { kind: 'frontload', saved: 7.4, text: 'B' },
+  ];
+  const r = formatReport(est, tips, 'x');
+  assert.match(r, /Speed-ups \(−14 min\):/);
+  assert.equal(r.match(/\(−7 min\)/g).length, 2);
 });

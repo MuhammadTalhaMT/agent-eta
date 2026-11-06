@@ -77,3 +77,9 @@ test('task depending on itself is rejected', () => {
   i.tasks[1].depends_on = [2];
   assert.throws(() => validateInput(i), /Invalid tags: tasks\[1\]\.depends_on\[0\] cannot reference the task itself/);
 });
+
+test('duplicate phases are rejected', () => {
+  const i = good();
+  i.phases = ['spec', 'spec'];
+  assert.throws(() => validateInput(i), /Invalid tags: phases\[1\] duplicates spec/);
+});
