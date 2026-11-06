@@ -1,6 +1,7 @@
 const TASK_HEADING = /^###\s+Task\s+(\d+):\s*(.+?)\s*$/;
 const ANY_HEADING = /^#{1,3}\s/;
 const FILE_LINE = /^\s*-\s*(?:Create|Modify|Test|Delete):\s*`([^`]+)`/i;
+const FENCE = /^\s*(`{3,}|~{3,})(.*)$/;
 const CHECKBOX = /^\s*-\s\[( |x|X)\]/;
 
 export function parsePlan(text) {
@@ -9,16 +10,20 @@ export function parsePlan(text) {
   const tasks = [];
   let cur = null;
   let inFiles = false;
-  let inFence = false;
+  let fence = null;
   let totalSteps = 0;
   let checkedSteps = 0;
 
   for (const line of lines) {
-    if (/^\s*```/.test(line)) {
-      inFence = !inFence;
+    const fm = line.match(FENCE);
+    if (fence) {
+      if (fm && fm[1][0] === fence.char && fm[1].length >= fence.len && fm[2].trim() === '') fence = null;
       continue;
     }
-    if (inFence) continue;
+    if (fm) {
+      fence = { char: fm[1][0], len: fm[1].length };
+      continue;
+    }
 
     const h = line.match(TASK_HEADING);
     if (h) {

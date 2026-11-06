@@ -1,5 +1,16 @@
-import { readFileSync, writeFileSync, appendFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync, renameSync } from 'node:fs';
 import { join } from 'node:path';
+
+function atomicWrite(path, text) {
+  const tmp = `${path}.${process.pid}.tmp`;
+  writeFileSync(tmp, text);
+  try {
+    renameSync(tmp, path);
+  } catch (err) {
+    if (err.code !== 'EPERM' && err.code !== 'EBUSY') throw err;
+    renameSync(tmp, path);
+  }
+}
 
 export const recordsPath = dir => join(dir, 'estimates.jsonl');
 
@@ -19,18 +30,21 @@ export function readRecords(dir) {
 }
 
 export function writeRecords(dir, records) {
-  writeFileSync(recordsPath(dir), records.map(r => JSON.stringify(r)).join('\n') + (records.length ? '\n' : ''));
+  atomicWrite(recordsPath(dir), records.map(r => JSON.stringify(r)).join('\n') + (records.length ? '\n' : ''));
 }
 
 export function appendRecord(dir, record) {
+  mkdirSync(dir, { recursive: true });
   appendFileSync(recordsPath(dir), JSON.stringify(record) + '\n');
 }
 
 export function saveCalibration(dir, calibration) {
-  writeFileSync(join(dir, 'calibration.json'), JSON.stringify(calibration, null, 2));
+  mkdirSync(dir, { recursive: true });
+  atomicWrite(join(dir, 'calibration.json'), JSON.stringify(calibration, null, 2));
 }
 
 export function logError(dir, message) {
+  mkdirSync(dir, { recursive: true });
   appendFileSync(join(dir, 'errors.log'), `${new Date().toISOString()} ${message}\n`);
 }
 

@@ -12,7 +12,7 @@ export function projectsRoot(env = process.env) {
 export const encodeProjectPath = p => p.replace(/[^A-Za-z0-9]/g, '-');
 
 export function isHumanPrompt(e) {
-  if (e.type !== 'user' || e.isMeta || e.isCompactSummary || e.toolUseResult) return false;
+  if (e.type !== 'user' || e.isMeta || e.isCompactSummary || e.toolUseResult || e.isSidechain) return false;
   const c = e.message?.content;
   let text;
   if (typeof c === 'string') {
@@ -27,7 +27,7 @@ export function isHumanPrompt(e) {
   return !NOT_HUMAN.test(text);
 }
 
-export function readEntries(file) {
+export function readEntries(file, window = null) {
   let text;
   try {
     text = readFileSync(file, 'utf8');
@@ -36,7 +36,14 @@ export function readEntries(file) {
   }
   const out = [];
   for (const line of text.split('\n')) {
-    if (!line.trim()) continue;
+    if (!line.includes('"type":"user"') && !line.includes('"type":"assistant"')) continue;
+    if (window) {
+      const m = line.match(/"timestamp":"([^"]+)"/);
+      if (m) {
+        const t = Date.parse(m[1]);
+        if (t < window.startMs || t > window.endMs) continue;
+      }
+    }
     let e;
     try {
       e = JSON.parse(line);
@@ -51,9 +58,16 @@ export function readEntries(file) {
   return out;
 }
 
-export function transcriptFiles(projectDir) {
+export function transcriptFiles(projectDir, sessionId = null) {
   const out = { main: [], subagents: [] };
   if (!existsSync(projectDir)) return out;
+  if (sessionId) {
+    const main = join(projectDir, `${sessionId}.jsonl`);
+    if (existsSync(main)) out.main.push(main);
+    const sub = join(projectDir, sessionId, 'subagents');
+    if (existsSync(sub)) for (const f of readdirSync(sub)) if (f.endsWith('.jsonl')) out.subagents.push(join(sub, f));
+    return out;
+  }
   for (const entry of readdirSync(projectDir, { withFileTypes: true })) {
     const full = join(projectDir, entry.name);
     if (entry.isFile() && entry.name.endsWith('.jsonl')) {
@@ -67,14 +81,20 @@ export function transcriptFiles(projectDir) {
   return out;
 }
 
-const touchedSince = (file, startMs) => statSync(file).mtimeMs >= startMs;
+const touchedSince = (file, startMs) => {
+  try {
+    return statSync(file).mtimeMs >= startMs;
+  } catch {
+    return false;
+  }
+};
 
-export function measureWindow(projectDir, startMs, endMs, breakMinutes) {
-  const { main, subagents } = transcriptFiles(projectDir);
+export function measureWindow(projectDir, startMs, endMs, breakMinutes, sessionId = null) {
+  const { main, subagents } = transcriptFiles(projectDir, sessionId);
   const entries = [];
   for (const f of [...main, ...subagents]) {
     if (!touchedSince(f, startMs)) continue;
-    for (const e of readEntries(f)) if (e.ts >= startMs && e.ts <= endMs) entries.push(e);
+    for (const e of readEntries(f, { startMs, endMs })) if (e.ts >= startMs && e.ts <= endMs) entries.push(e);
   }
   entries.sort((a, b) => a.ts - b.ts);
 
@@ -95,11 +115,11 @@ export function measureWindow(projectDir, startMs, endMs, breakMinutes) {
   return { agentMinutes, userMinutes, humanGaps, entries: entries.length };
 }
 
-export function subagentRuns(projectDir, startMs, endMs) {
+export function subagentRuns(projectDir, startMs, endMs, sessionId = null) {
   const runs = [];
-  for (const f of transcriptFiles(projectDir).subagents) {
+  for (const f of transcriptFiles(projectDir, sessionId).subagents) {
     if (!touchedSince(f, startMs)) continue;
-    const es = readEntries(f).filter(e => e.ts >= startMs && e.ts <= endMs);
+    const es = readEntries(f, { startMs, endMs }).filter(e => e.ts >= startMs && e.ts <= endMs);
     if (es.length < 2) continue;
     let lo = Infinity;
     let hi = -Infinity;

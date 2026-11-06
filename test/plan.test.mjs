@@ -65,3 +65,19 @@ test('CRLF line endings work', () => {
   assert.equal(p.tasks.length, 2);
   assert.equal(p.tasks[0].files.length, 3);
 });
+
+const F4 = '`'.repeat(4);
+const F3 = '`'.repeat(3);
+
+test('a 4-backtick fence containing a 3-backtick block hides tasks and steps', () => {
+  const p = parsePlan(['### Task 1: Real', '', '- [ ] a', F4 + 'md', F3 + 'js', 'x', F3, '### Task 9: Fake', '- [ ] x', F4, '- [ ] b', ''].join(String.fromCharCode(10)));
+  assert.equal(p.tasks.length, 1);
+  assert.equal(p.tasks[0].steps, 2);
+  assert.equal(p.totalSteps, 2);
+});
+
+test('a ~~~ fence is ignored the same way', () => {
+  const p = parsePlan(['### Task 1: Real', '- [ ] a', '~~~', '### Task 9: Fake', '- [ ] x', '~~~', '- [ ] b', ''].join(String.fromCharCode(10)));
+  assert.equal(p.tasks.length, 1);
+  assert.equal(p.totalSteps, 2);
+});
