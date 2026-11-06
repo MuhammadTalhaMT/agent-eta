@@ -1,24 +1,58 @@
 {
   "version": 1,
   "base": {
-    "mechanical": { "S": 3, "M": 6, "L": 12 },
-    "integration": { "S": 5, "M": 10, "L": 20 },
-    "judgment": { "S": 8, "M": 16, "L": 30 }
+    "mechanical": {
+      "S": 2.2,
+      "M": 6,
+      "L": 13.3
+    },
+    "integration": {
+      "S": 3.7,
+      "M": 9.9,
+      "L": 22.2
+    },
+    "judgment": {
+      "S": 5.9,
+      "M": 15.9,
+      "L": 35.5
+    }
   },
-  "workflowFactor": { "inline": 1.0, "subagent-driven": 1.8 },
+  "workflowFactor": {
+    "inline": 1,
+    "subagent-driven": 1.8
+  },
   "depMinutes": 3,
-  "phaseAgent": { "brainstorm": 5, "spec": 5, "plan": 10 },
-  "phaseActive": { "brainstormPerQuestion": 2, "spec": 5, "plan": 5 },
+  "phaseAgent": {
+    "brainstorm": 5,
+    "spec": 5,
+    "plan": 10
+  },
+  "phaseActive": {
+    "brainstormPerQuestion": 2,
+    "spec": 5,
+    "plan": 5
+  },
   "brainstormQuestions": 5,
-  "manualTestActive": { "S": 5, "M": 10, "L": 15 },
-  "replyDelay": 4,
-  "spread": { "mechanical": 1.3, "integration": 1.8, "judgment": 2.5 },
+  "manualTestActive": {
+    "S": 5,
+    "M": 10,
+    "L": 15
+  },
+  "replyDelay": 1.2,
+  "spread": {
+    "mechanical": 1.3,
+    "integration": 1.8,
+    "judgment": 2.5
+  },
   "externalSpread": 1.5,
   "lowFactor": 0.85,
   "mergeOverhead": 3,
   "breakMinutes": 30,
   "minConfirmed": 3,
   "learningRate": 0.3,
-  "clamp": [0.5, 2.0],
+  "clamp": [
+    0.5,
+    2
+  ],
   "expiryDays": 14
 }
