@@ -105,6 +105,68 @@ test('precise estimate with every task ticked exits 2 and saves nothing', () => 
   assert.equal(readRecords(h.home).length, 0);
 });
 
+function sessionRunner(sid = 'sess-dup') {
+  const home = tmp();
+  const outLines = [];
+  const run = (argv, now) => main(argv, {
+    env: { AGENT_ETA_HOME: home, AGENT_ETA_PROJECTS: tmp(), ...(sid ? { CLAUDE_CODE_SESSION_ID: sid } : {}) },
+    cwd: PROJECT, now, out: s => outLines.push(s), err: () => {},
+  });
+  return { home, run, out: () => outLines.join(String.fromCharCode(10)) };
+}
+
+test('re-running estimate in the same session within 10 min replaces the open record', () => {
+  const s = sessionRunner();
+  s.run(['estimate', tagsFile(TAGS)], at('10:00'));
+  const retagged = structuredClone(TAGS);
+  retagged.tasks[0].size = 'L';
+  s.run(['estimate', tagsFile(retagged)], at('10:05'));
+  const rs = readRecords(s.home);
+  assert.equal(rs.length, 1);
+  assert.equal(rs[0].startedAt, T('10:00'));
+  assert.equal(rs[0].input.tasks[0].size, 'L');
+  assert.equal(rs[0].predicted.perTask[0].size, 'L');
+  assert.match(s.out(), new RegExp(`Estimate ${rs[0].id} (saved|updated)`));
+});
+
+test('precise re-run with the same plan in the same session replaces the record', () => {
+  const s = sessionRunner();
+  const plan = join(tmp(), 'plan.md');
+  writeFileSync(plan, '### Task 1: API route\n\n- [ ] a\n');
+  s.run(['estimate', tagsFile(TAGS), '--plan', plan], at('10:00'));
+  const renamed = structuredClone(TAGS);
+  renamed.tasks[0].title = 'Different title';
+  s.run(['estimate', tagsFile(renamed), '--plan', plan], at('10:09'));
+  assert.equal(readRecords(s.home).length, 1);
+});
+
+test('estimate appends when the earlier record differs, is old, or has no session', () => {
+  const other = structuredClone(TAGS);
+  other.tasks[0].title = 'Something else';
+
+  const a = sessionRunner();
+  a.run(['estimate', tagsFile(TAGS)], at('10:00'));
+  a.run(['estimate', tagsFile(other)], at('10:01'));
+  assert.equal(readRecords(a.home).length, 2, 'different task titles');
+
+  const b = sessionRunner();
+  b.run(['estimate', tagsFile(TAGS)], at('10:00'));
+  b.run(['estimate', tagsFile(TAGS)], at('10:11'));
+  assert.equal(readRecords(b.home).length, 2, 'older than 10 min');
+
+  const c = sessionRunner(null);
+  c.run(['estimate', tagsFile(TAGS)], at('10:00'));
+  c.run(['estimate', tagsFile(TAGS)], at('10:01'));
+  assert.equal(readRecords(c.home).length, 2, 'no session id');
+
+  const d = sessionRunner();
+  const plan = join(tmp(), 'plan.md');
+  writeFileSync(plan, '### Task 1: API route\n\n- [ ] a\n');
+  d.run(['estimate', tagsFile(TAGS)], at('10:00'));
+  d.run(['estimate', tagsFile(TAGS), '--plan', plan], at('10:01'));
+  assert.equal(readRecords(d.home).length, 2, 'different mode');
+});
+
 test('invalid tags exit 2 and name the field', () => {
   const h = harness();
   const bad = structuredClone(TAGS);

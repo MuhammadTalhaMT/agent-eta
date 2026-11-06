@@ -55,6 +55,24 @@ function readInput(path, what) {
   }
 }
 
+const RERUN_MS = 10 * 60000;
+const taskTitles = r => JSON.stringify((Array.isArray(r.input?.tasks) ? r.input.tasks : []).map(t => t?.title));
+
+// A second `estimate` for the same work in the same session (a retry, or re-tagging) replaces the
+// open record instead of adding one, so learning doesn't count the build twice.
+function findRerun(records, rec, now) {
+  if (!rec.sessionId) return null;
+  return [...records].reverse().find(r => {
+    const age = now - Date.parse(r.startedAt);
+    return r.status === 'open'
+      && r.sessionId === rec.sessionId
+      && sameProject(r.project, rec.project)
+      && age >= 0 && age < RERUN_MS
+      && r.mode === rec.mode
+      && (rec.mode === 'precise' ? sameProject(r.planPath, rec.planPath) : taskTitles(r) === taskTitles(rec));
+  }) ?? null;
+}
+
 // Plan tasks whose checkboxes are all ticked are already built; a mid-plan estimate covers the rest.
 function tickedTaskIds(planFile) {
   try {
@@ -180,15 +198,23 @@ function run(argv, { env, cwd, now, out, err, measure }) {
         ...(skipped.length ? { skippedTasks: skipped } : {}),
         status: 'open',
       };
-      appendRecord(dir, record);
+      const earlier = findRerun(readRecords(dir), record, now);
+      if (earlier) {
+        record.id = earlier.id;
+        record.startedAt = earlier.startedAt;
+        updateRecords(dir, [record]);
+      } else {
+        appendRecord(dir, record);
+      }
       out(formatReport(est, tips, calibrationStatus(defaults, calibration), warning));
       out('');
       if (skipped.length) {
         out(`Skipped task${skipped.length === 1 ? '' : 's'} ${skipped.join(', ')} (already ticked in the plan).`);
       }
+      const saved = earlier ? `Estimate ${record.id} updated (replaces this session's earlier run).` : `Estimate ${record.id} saved.`;
       out(planPath
-        ? `Estimate ${record.id} saved. I'll notice when every plan checkbox is ticked, or run /agent-eta:eta-done.`
-        : `Estimate ${record.id} saved. Run /agent-eta:eta-done when this work is finished so the estimate can learn.`);
+        ? `${saved} I'll notice when every plan checkbox is ticked, or run /agent-eta:eta-done.`
+        : `${saved} Run /agent-eta:eta-done when this work is finished so the estimate can learn.`);
       return 0;
     }
 
