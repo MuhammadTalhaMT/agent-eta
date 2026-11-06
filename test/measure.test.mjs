@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdirSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { nudge, findDoneAt, matchTasks, applyLearning, runMeasure } from '../scripts/measure.mjs';
-import { encodeProjectPath } from '../scripts/lib/transcripts.mjs';
+import { encodeProjectPath, measureWindow } from '../scripts/lib/transcripts.mjs';
 import { appendRecord, readRecords } from '../scripts/lib/store.mjs';
 import { loadCalibration, emptyCalibration } from '../scripts/lib/config.mjs';
 import { testParams, near, tmp } from './helpers.mjs';
@@ -196,4 +196,19 @@ test('findDoneAt: unreadable plan counts as not done; plan time capped at now', 
   assert.equal(d.status, 'done');
   assert.ok(d.doneAt <= early);
   assert.equal(findDoneAt(record({ planPath: tmp() }), early, p).status, 'open');
+});
+
+test('runMeasure keeps a record appended by another session while it was measuring', () => {
+  const dir = tmp();
+  const root = tmp();
+  transcripts(root);
+  appendRecord(dir, record({ id: 'mine', doneAt: T('10:30') }));
+  const slowWindow = (...args) => {
+    appendRecord(dir, record({ id: 'appended-meanwhile' }));
+    return measureWindow(...args);
+  };
+  runMeasure({ dir, defaults: testParams(), now: Date.parse(T('12:00')), root, window: slowWindow });
+  const byId = Object.fromEntries(readRecords(dir).map(r => [r.id, r]));
+  assert.equal(byId.mine.status, 'confirmed');
+  assert.equal(byId['appended-meanwhile']?.status, 'open');
 });

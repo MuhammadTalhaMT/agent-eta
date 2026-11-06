@@ -8,7 +8,7 @@ import { speedups } from './speedups.mjs';
 import { formatReport, formatDuration } from './lib/format.mjs';
 import { parsePlan } from './lib/plan.mjs';
 import { projectsRoot } from './lib/transcripts.mjs';
-import { readRecords, writeRecords, appendRecord, newId, logError } from './lib/store.mjs';
+import { readRecords, updateRecords, appendRecord, newId, logError } from './lib/store.mjs';
 import { runMeasure } from './measure.mjs';
 
 const USAGE = `Usage:
@@ -170,7 +170,7 @@ function run(argv, { env, cwd, now, out, err }) {
         return 1;
       }
       target.doneAt = new Date(now).toISOString();
-      writeRecords(dir, records);
+      updateRecords(dir, [target]);
       const result = safeMeasure(ctx);
       const r = result?.records.find(x => x.id === target.id);
       if (r?.status === 'confirmed' && r.predicted && r.actual) {

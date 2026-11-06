@@ -2,7 +2,7 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { parsePlan } from './lib/plan.mjs';
 import { projectsRoot, encodeProjectPath, measureWindow, subagentRuns } from './lib/transcripts.mjs';
-import { readRecords, writeRecords, saveCalibration, logError } from './lib/store.mjs';
+import { readRecords, updateRecords, saveCalibration, logError } from './lib/store.mjs';
 import { loadCalibration } from './lib/config.mjs';
 
 // Move `old` toward clamp(ratio) * applied, where `applied` is the multiplier that was
@@ -64,17 +64,18 @@ export function applyLearning(calibration, record, actual, matched, params) {
   return cal;
 }
 
-export function runMeasure({ dir, defaults, now = Date.now(), root = projectsRoot() }) {
+// `window` is a test seam for the (slow) transcript measurement.
+export function runMeasure({ dir, defaults, now = Date.now(), root = projectsRoot(), window = measureWindow }) {
   const records = readRecords(dir);
   let { calibration } = loadCalibration(dir);
-  let changed = false;
+  const changed = new Set();
 
   for (const r of records) {
     if (r.status !== 'open') continue;
     try {
       const d = findDoneAt(r, now, defaults);
       if (d.status === 'open') continue;
-      changed = true;
+      changed.add(r);
 
       if (d.status === 'expired') {
         r.status = 'unconfirmed';
@@ -86,7 +87,7 @@ export function runMeasure({ dir, defaults, now = Date.now(), root = projectsRoo
       const startMs = Date.parse(r.startedAt);
       r.doneAt = new Date(d.doneAt).toISOString();
       const sessionId = r.sessionId ?? null;
-      const actual = measureWindow(projectDir, startMs, d.doneAt, defaults.breakMinutes, sessionId);
+      const actual = window(projectDir, startMs, d.doneAt, defaults.breakMinutes, sessionId);
       if (actual.entries < 2) {
         r.status = 'unconfirmed';
         r.reason = 'no transcript activity found';
@@ -107,7 +108,7 @@ export function runMeasure({ dir, defaults, now = Date.now(), root = projectsRoo
       };
       calibration = next;
     } catch (e) {
-      changed = true;
+      changed.add(r);
       r.status = 'unconfirmed';
       r.reason = 'record unreadable';
       delete r.actual;
@@ -115,9 +116,10 @@ export function runMeasure({ dir, defaults, now = Date.now(), root = projectsRoo
     }
   }
 
-  if (changed) {
-    writeRecords(dir, records);
+  if (changed.size) {
+    // Re-read and merge by id so records another session appended meanwhile aren't lost.
+    updateRecords(dir, [...changed]);
     saveCalibration(dir, calibration);
   }
-  return { records, calibration };
+  return { records: changed.size ? readRecords(dir) : records, calibration };
 }
